@@ -1,8 +1,9 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -18,43 +19,29 @@ def get_word_from_arabus(word):
             translations.append(text)
         if len(translations) >= 6:
             break
-    return translations
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["📖 Учить слова", "🧪 Тест"],
-        ["🔁 Повторение", "📊 Прогресс"]
-    ]
-    await update.message.reply_text(
-        "🕌 *ArabBolatBot*\n"
-        "Учим арабские слова (Коран + классический арабский).\n\n"
-        "Отправь арабское слово.",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-        parse_mode="Markdown"
-    )
+    if translations:
+        return "\n".join(translations)
+    else:
+        return "❌ Перевод не найден"
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Отправь арабское слово — я переведу 🤍")
+
+def handle_text(update: Update, context: CallbackContext):
     word = update.message.text.strip()
-    translations = get_word_from_arabus(word)
-
-    if not translations:
-        await update.message.reply_text("❌ Не нашёл слово. Попробуй другую форму.")
-        return
-
-    text = f"📘 *{word}*\n\n*Значения:*\n"
-    for i, t in enumerate(translations, 1):
-        text += f"{i}. {t}\n"
-
-    await update.message.reply_text(text, parse_mode="Markdown")
+    result = get_word_from_arabus(word)
+    update.message.reply_text(result)
 
 def main():
-    if not TOKEN:
-        raise RuntimeError("BOT_TOKEN not set")
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.run_polling()
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
