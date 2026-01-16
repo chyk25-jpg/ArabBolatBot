@@ -3,11 +3,18 @@ import requests
 from bs4 import BeautifulSoup
 
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    ContextTypes,
+    filters,
+)
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-def get_word_from_arabus(word):
+
+def get_word_from_arabus(word: str):
     url = f"https://arabus.ru/?q={word}"
     r = requests.get(url, timeout=10)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -15,33 +22,40 @@ def get_word_from_arabus(word):
     translations = []
     for li in soup.select("li"):
         text = li.get_text(strip=True)
-        if text:
+        if text and word not in text:
             translations.append(text)
         if len(translations) >= 6:
             break
 
-    if translations:
-        return "\n".join(translations)
-    else:
-        return "❌ Перевод не найден"
+    return translations
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Отправь арабское слово — я переведу 🤍")
 
-def handle_text(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Отправь арабское слово — я покажу перевод 📘"
+    )
+
+
+async def handle_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     word = update.message.text.strip()
-    result = get_word_from_arabus(word)
-    update.message.reply_text(result)
+    translations = get_word_from_arabus(word)
+
+    if not translations:
+        await update.message.reply_text("Перевод не найден ❌")
+        return
+
+    reply = f"📖 {word}\n\n" + "\n".join(f"• {t}" for t in translations)
+    await update.message.reply_text(reply)
+
 
 def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_word))
 
-    updater.start_polling()
-    updater.idle()
+    app.run_polling()
+
 
 if __name__ == "__main__":
     main()
